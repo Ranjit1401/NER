@@ -1,0 +1,6 @@
+{
+  "name": "ai-agents-package",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-agent orchestrator and specialized agent domain package"
+}

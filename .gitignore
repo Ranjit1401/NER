@@ -1,0 +1,104 @@
+# ================================
+# ENVIRONMENT / SECRETS
+# ================================
+.env
+.env.*
+!.env.example
+*.env
+
+# ================================
+# PYTHON
+# ================================
+__pycache__/
+*.py[cod]
+*$py.class
+
+.venv/
+venv/
+env/
+ENV/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+*.egg-info/
+dist/
+build/
+
+# ================================
+# NODE / REACT / VITE
+# ================================
+node_modules/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Vite
+.vite/
+*.local
+
+# Build output
+apps/web/dist/
+apps/field-app/dist/
+packages/*/dist/
+
+# ================================
+# IDE
+# ================================
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+.idea/
+*.swp
+*.swo
+
+# ================================
+# OS
+# ================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ================================
+# LOGS
+# ================================
+*.log
+logs/
+
+# ================================
+# DATABASE / LOCAL DATA
+# ================================
+*.sqlite
+*.sqlite3
+*.db
+
+# ================================
+# TEMPORARY FILES
+# ================================
+tmp/
+temp/
+.cache/
+
+# ================================
+# TEST / COVERAGE
+# ================================
+coverage/
+.nyc_output/
+
+# ================================
+# LATENTCODE / AI TOOL LOCAL DATA
+# ================================
+.latentcode/cache/
+.latentcode/logs/
+
+# ================================
+# LOCAL STORAGE / GENERATED DATA
+# ================================
+uploads/
+storage/
