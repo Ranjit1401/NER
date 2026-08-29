@@ -167,6 +167,40 @@ class OperationalDispatchService:
         await self.session.refresh(order)
         return order
 
+    async def update_dispatch_status(self, order_id: uuid.UUID, new_status: DispatchStatus) -> DispatchOrder:
+        """Update dispatch status through valid state machine transitions."""
+        order_stmt = select(DispatchOrder).where(DispatchOrder.id == order_id).with_for_update()
+        order_res = await self.session.execute(order_stmt)
+        order = order_res.scalar_one_or_none()
+
+        if not order:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dispatch order not found")
+
+        current = DispatchStatus(order.status)
+        
+        # Valid state transitions
+        valid_transitions = {
+            DispatchStatus.PROPOSED: [DispatchStatus.PENDING_APPROVAL, DispatchStatus.CANCELLED],
+            DispatchStatus.PENDING_APPROVAL: [DispatchStatus.APPROVED, DispatchStatus.REJECTED, DispatchStatus.CANCELLED],
+            DispatchStatus.APPROVED: [DispatchStatus.ASSIGNED, DispatchStatus.ACCEPTED, DispatchStatus.EN_ROUTE, DispatchStatus.CANCELLED],
+            DispatchStatus.ASSIGNED: [DispatchStatus.ACCEPTED, DispatchStatus.REJECTED, DispatchStatus.CANCELLED],
+            DispatchStatus.ACCEPTED: [DispatchStatus.EN_ROUTE, DispatchStatus.CANCELLED],
+            DispatchStatus.EN_ROUTE: [DispatchStatus.DELIVERED, DispatchStatus.FAILED],
+            DispatchStatus.DISPATCHED: [DispatchStatus.DELIVERED, DispatchStatus.FAILED],
+        }
+
+        allowed = valid_transitions.get(current, [])
+        if new_status not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid transition from '{current}' to '{new_status}'. Allowed: {[s.value for s in allowed]}"
+            )
+
+        order.status = new_status.value
+        await self.session.commit()
+        await self.session.refresh(order)
+        return order
+
     async def reject_dispatch(self, order_id: uuid.UUID, request: DispatchOrderRejectRequest) -> DispatchOrder:
         """Reject dispatch proposal and record rejection reason in audit log."""
         if request.user_role not in [UserRole.COMMANDER, UserRole.ADMIN]:

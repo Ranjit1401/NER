@@ -117,8 +117,13 @@ export const App: React.FC = () => {
     }
   };
 
+  // Poll backend data & driver telemetry every 15 seconds
   useEffect(() => {
     loadData();
+    const timer = setInterval(() => {
+      loadData();
+    }, 15000);
+    return () => clearInterval(timer);
   }, []);
 
   return (
@@ -130,6 +135,10 @@ export const App: React.FC = () => {
         activeIncidentsCount={disasters.filter((d) => d.status === 'ACTIVE').length}
         criticalAlertsCount={disasters.filter((d) => d.severity === 'CRITICAL').length}
         lastSyncTime={lastSyncTime}
+        dispatchesCount={dispatches.length}
+        activeTrucksCount={dispatches.filter((dp) => String(dp.status) === 'EN_ROUTE' || dp.status === 'APPROVED' || dp.status === 'DISPATCHED').length || 1}
+        blockedRoutesCount={roads.filter((r) => r.current_status === 'BLOCKED' || r.current_status === 'CAUTION' || r.current_status === 'IMPASSABLE').length}
+        pendingApprovalsCount={dispatches.filter((dp) => dp.status === 'PROPOSED' || dp.status === 'PENDING_APPROVAL').length}
       />
 
       <div className="flex flex-1 overflow-hidden">

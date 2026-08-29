@@ -193,6 +193,27 @@ async def test_invalid_status_transition():
     assert exc_info.value.status_code == 400
     assert "Invalid transition" in exc_info.value.detail
 
+@pytest.mark.asyncio
+async def test_update_dispatch_status_lifecycle():
+    mock_session = AsyncMock()
+    service = OperationalDispatchService(mock_session)
+
+    order_id = uuid.uuid4()
+    mock_order = DispatchOrder(id=order_id, order_code="DISP-200", status=DispatchStatus.APPROVED.value)
+    mock_session.execute.return_value = MagicMock(scalar_one_or_none=lambda: mock_order)
+
+    # Valid transition: APPROVED -> ASSIGNED
+    updated = await service.update_dispatch_status(order_id, DispatchStatus.ASSIGNED)
+    assert updated.status == DispatchStatus.ASSIGNED.value
+
+    # Invalid transition: DELIVERED -> PROPOSED
+    mock_order_delivered = DispatchOrder(id=order_id, order_code="DISP-201", status=DispatchStatus.DELIVERED.value)
+    mock_session.execute.return_value = MagicMock(scalar_one_or_none=lambda: mock_order_delivered)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.update_dispatch_status(order_id, DispatchStatus.PROPOSED)
+    assert exc_info.value.status_code == 400
+
 # 9. Transaction rollback when operation fails test
 @pytest.mark.asyncio
 async def test_transaction_rollback_on_failure():

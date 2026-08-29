@@ -4,7 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from geoalchemy2.functions import ST_GeomFromText
 from apps.api.models.domain import FieldReport, AIAuditLog
-from apps.api.schemas.sync_schemas import FieldReportCreate, SyncResult
+from apps.api.schemas.sync_schemas import FieldReportCreate, DriverEventCreate, DriverTelemetryRead, SyncResult
+
+# In-memory latest telemetry cache by driver/truck
+LATEST_DRIVER_TELEMETRY: dict[str, DriverTelemetryRead] = {}
 from apps.api.services.gis_utils import point_to_wkt, geometry_to_point_coords
 
 class OfflineSyncService:
@@ -82,6 +85,54 @@ class OfflineSyncService:
             status="SYNCED",
             server_id=report.id,
             message="Field report synchronized successfully."
+        )
+
+    async def sync_driver_event(self, data: DriverEventCreate) -> SyncResult:
+        """Process driver trip status updates, road hazard reports, and SOS emergencies idempotently."""
+        # Update latest telemetry cache
+        telemetry = DriverTelemetryRead(
+            driver_id=data.driver_id,
+            truck_id=data.truck_id,
+            dispatch_id=data.dispatch_id,
+            latitude=data.latitude,
+            longitude=data.longitude,
+            speed_kmh=data.speed_kmh,
+            heading=data.heading,
+            trip_status=data.trip_status or "EN_ROUTE",
+            severity=data.severity.value if hasattr(data.severity, "value") else str(data.severity),
+            recorded_at=data.created_at,
+            connection_status="ONLINE"
+        )
+        LATEST_DRIVER_TELEMETRY[data.truck_id] = telemetry
+
+        audit = AIAuditLog(
+            agent_name="TRUCK_DRIVER_TELEMETRY" if data.event_type != "EMERGENCY_SOS" else "CRITICAL_DRIVER_SOS",
+            prompt_summary=f"Ingested driver event [{data.event_type}]: {data.dispatch_id}",
+            recommendation=f"Driver event '{data.event_type}' processed for convoy {data.dispatch_id}. Location: ({data.latitude:.4f}, {data.longitude:.4f})",
+            confidence_score=1.000,
+            evidence_data={
+                "client_generated_id": data.client_generated_id,
+                "dispatch_id": data.dispatch_id,
+                "driver_id": data.driver_id,
+                "truck_id": data.truck_id,
+                "event_type": data.event_type,
+                "trip_status": data.trip_status,
+                "problem_type": data.problem_type,
+                "latitude": data.latitude,
+                "longitude": data.longitude,
+                "speed_kmh": data.speed_kmh,
+                "description": data.description,
+            },
+            model_used="DRIVER_TELEMETRY_ENGINE",
+            execution_time_ms=0
+        )
+        self.session.add(audit)
+        await self.session.commit()
+
+        return SyncResult(
+            client_generated_id=data.client_generated_id,
+            status="SYNCED",
+            message=f"Driver event '{data.event_type}' synchronized successfully."
         )
 
     async def list_reports(self) -> list[FieldReport]:

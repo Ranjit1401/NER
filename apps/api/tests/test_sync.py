@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
 from apps.api.main import app
 from apps.api.models.domain import FieldReport, AIAuditLog
-from apps.api.schemas.sync_schemas import FieldReportCreate
+from apps.api.schemas.sync_schemas import FieldReportCreate, DriverEventCreate
 from apps.api.services.sync_service import OfflineSyncService
 
 client = TestClient(app)
@@ -127,3 +127,29 @@ def test_sync_field_report_api_endpoint():
         data = res.json()
         assert data["status"] == "SYNCED"
         assert data["client_generated_id"] == "REP-CLIENT-API-01"
+
+@pytest.mark.asyncio
+async def test_sync_driver_event_success():
+    mock_session = AsyncMock()
+    service = OfflineSyncService(mock_session)
+
+    driver_event = DriverEventCreate(
+        client_generated_id="DRV-EVENT-TEST-01",
+        event_type="TRIP_UPDATE",
+        dispatch_id="DISP-1001",
+        driver_id="NER-DRIVER-01",
+        truck_id="TRK-NE-042",
+        trip_status="EN_ROUTE",
+        latitude=26.1833,
+        longitude=91.7333,
+        speed_kmh=48.0,
+        heading=90.0,
+        description="Driver entered NH-27 main corridor",
+        created_at=datetime.datetime.now(datetime.timezone.utc)
+    )
+
+    res = await service.sync_driver_event(driver_event)
+
+    assert res.status == "SYNCED"
+    assert res.client_generated_id == "DRV-EVENT-TEST-01"
+    mock_session.commit.assert_called_once()

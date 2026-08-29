@@ -9,10 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/maplibre-gl": "^1.13.2",
     "lucide-react": "^0.344.0",
+    "maplibre-gl": "^6.6.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.3"
+    "react-router-dom": "^6.22.3",
+    "smart-logistics-intelligence-root": "file:../.."
   },
   "devDependencies": {
     "@types/react": "^18.2.66",

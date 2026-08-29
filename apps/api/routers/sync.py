@@ -2,11 +2,23 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.core.database import get_db_session
-from apps.api.schemas.sync_schemas import FieldReportCreate, FieldReportRead, SyncResult
-from apps.api.services.sync_service import OfflineSyncService
+from apps.api.schemas.sync_schemas import FieldReportCreate, FieldReportRead, SyncResult, DriverEventCreate, DriverTelemetryRead
+from apps.api.services.sync_service import OfflineSyncService, LATEST_DRIVER_TELEMETRY
 from apps.api.services.gis_utils import geometry_to_point_coords
 
 router = APIRouter(prefix="/sync", tags=["Offline Sync & Field Reports"])
+
+@router.post("/driver-events", response_model=SyncResult, status_code=status.HTTP_200_OK)
+async def sync_driver_event(
+    payload: DriverEventCreate,
+    session: AsyncSession = Depends(get_db_session)
+) -> SyncResult:
+    service = OfflineSyncService(session)
+    return await service.sync_driver_event(payload)
+
+@router.get("/driver-telemetry/latest", response_model=list[DriverTelemetryRead])
+async def get_latest_driver_telemetry() -> list[DriverTelemetryRead]:
+    return list(LATEST_DRIVER_TELEMETRY.values())
 
 @router.post("/field-reports", response_model=SyncResult, status_code=status.HTTP_200_OK)
 async def sync_field_report(

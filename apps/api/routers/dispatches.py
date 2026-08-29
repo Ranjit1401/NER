@@ -5,7 +5,7 @@ from apps.api.core.database import get_db_session
 from apps.api.schemas.domain import (
     DispatchOrderCreate, DispatchOrderRead, DispatchOrderUpdate,
     DispatchOrderApproveRequest, DispatchOrderRejectRequest,
-    AIAuditLogCreate, AIAuditLogRead
+    AIAuditLogCreate, AIAuditLogRead, DispatchStatus
 )
 from apps.api.services.repositories import DispatchRepository, AuditLogRepository
 from apps.api.services.dispatch_service import OperationalDispatchService
@@ -51,6 +51,16 @@ async def reject_dispatch_order(
 ) -> DispatchOrderRead:
     service = OperationalDispatchService(session)
     order = await service.reject_dispatch(order_id, payload)
+    return DispatchOrderRead.model_validate(order)
+
+@dispatch_router.post("/{order_id}/status", response_model=DispatchOrderRead)
+async def update_dispatch_status(
+    order_id: uuid.UUID,
+    new_status: DispatchStatus = Query(..., alias="status"),
+    session: AsyncSession = Depends(get_db_session)
+) -> DispatchOrderRead:
+    service = OperationalDispatchService(session)
+    order = await service.update_dispatch_status(order_id, new_status)
     return DispatchOrderRead.model_validate(order)
 
 @dispatch_router.get("/", response_model=list[DispatchOrderRead])

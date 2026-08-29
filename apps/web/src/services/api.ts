@@ -259,4 +259,19 @@ export const api = {
     const qs = agentName ? `?agent_name=${encodeURIComponent(agentName)}` : '';
     return fetchJson<AIAuditLog[]>(`/api/v1/audit-logs/${qs}`);
   },
+
+  // Driver Telemetry
+  getLatestDriverTelemetry: (): Promise<Array<{
+    driver_id: string;
+    truck_id: string;
+    dispatch_id: string;
+    latitude: number;
+    longitude: number;
+    speed_kmh: number;
+    heading: number;
+    trip_status: string;
+    severity: string;
+    recorded_at: string;
+    connection_status: string;
+  }>> => fetchJson('/api/v1/sync/driver-telemetry/latest'),
 };

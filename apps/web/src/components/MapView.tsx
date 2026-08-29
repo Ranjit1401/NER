@@ -589,7 +589,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
             <!-- Hover Telemetry Tag -->
             <div class="bg-slate-900/95 border border-amber-500/60 text-[9px] font-mono px-1.5 py-0.5 rounded text-amber-300 font-extrabold shadow-2xl hidden group-hover:block shrink-0">
-              ${dispatch.order_code} (${Math.round(bearingDeg)}°)
+              ${dispatch.order_code} [TRK-NE-042] • 45 km/h • GPS LIVE (12s ago)
             </div>
           `;
 

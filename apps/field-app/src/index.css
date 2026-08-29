@@ -1,0 +1,21 @@
+@import 'maplibre-gl/dist/maplibre-gl.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #0B0F19;
+    color: #F9FAFB;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+/* Custom mobile touch & scroll utilities */
+.touch-callout-none {
+  -webkit-touch-callout: none;
+}
+
+.tap-highlight-transparent {
+  -webkit-tap-highlight-color: transparent;
+}

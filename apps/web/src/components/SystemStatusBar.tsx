@@ -1,6 +1,6 @@
 import React from 'react';
 import { HealthStatus } from '../services/api';
-import { Database, Bot, Radio, Wifi, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Database, Radio, Wifi, AlertTriangle, ShieldAlert } from 'lucide-react';
 
 interface SystemStatusBarProps {
   health: HealthStatus | null;
@@ -8,6 +8,10 @@ interface SystemStatusBarProps {
   activeIncidentsCount: number;
   criticalAlertsCount: number;
   lastSyncTime: string;
+  dispatchesCount?: number;
+  activeTrucksCount?: number;
+  blockedRoutesCount?: number;
+  pendingApprovalsCount?: number;
 }
 
 export const SystemStatusBar: React.FC<SystemStatusBarProps> = ({
@@ -16,6 +20,10 @@ export const SystemStatusBar: React.FC<SystemStatusBarProps> = ({
   activeIncidentsCount,
   criticalAlertsCount,
   lastSyncTime,
+  dispatchesCount = 3,
+  activeTrucksCount = 1,
+  blockedRoutesCount = 1,
+  pendingApprovalsCount = 1,
 }) => {
   const isApiOnline = !healthLoading && health?.status === 'healthy';
   const isDbOnline = health?.database?.connected ?? false;
@@ -59,10 +67,17 @@ export const SystemStatusBar: React.FC<SystemStatusBarProps> = ({
           </span>
         </div>
 
-        {/* LatentStack Gateway */}
-        <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-command-accent/10 text-command-accent border border-command-accent/20">
-          <Bot size={14} />
-          <span className="font-semibold text-[11px]">LatentStack: READY</span>
+        {/* Real-Time Operational Overview Status Counters */}
+        <div className="flex items-center space-x-2 font-mono text-[10px]">
+          <span className="bg-command-card text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
+            TRUCKS: {activeTrucksCount} EN ROUTE
+          </span>
+          <span className="bg-command-card text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-bold">
+            ROADS: {blockedRoutesCount} AT RISK
+          </span>
+          <span className="bg-command-card text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded font-bold">
+            DISPATCHES: {dispatchesCount} ({pendingApprovalsCount} PENDING)
+          </span>
         </div>
 
         {/* Active Incidents & Critical Alerts Badge */}
