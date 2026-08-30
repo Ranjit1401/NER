@@ -96,6 +96,16 @@ class DisasterEventRead(DisasterEventBase):
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
+class RouteStatusRead(BaseModel):
+    route_id: str
+    status: RoadStatus
+    reason: str | None = None
+    hazard_type: str | None = None
+    severity: SeverityLevel | None = None
+    updated_at: datetime.datetime
+    alternate_route_available: bool = False
+    alternate_route_id: str | None = None
+
 # --- Road Segment Schemas ---
 class RoadSegmentBase(BaseModel):
     highway_code: str = Field(..., min_length=2, max_length=50)

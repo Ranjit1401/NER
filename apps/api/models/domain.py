@@ -135,3 +135,21 @@ class FieldReport(Base):
     __table_args__ = (
         Index("idx_field_report_location", location, postgresql_using="gist"),
     )
+
+class SystemAlert(Base):
+    __tablename__ = "system_alerts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_generated_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
+    alert_type: Mapped[str] = mapped_column(String(100), nullable=False) # SOS, HAZARD, FIELD_INCIDENT, DISASTER, BLOCKAGE
+    severity: Mapped[str] = mapped_column(String(50), nullable=False) # CRITICAL, HIGH, MEDIUM, LOW
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(255), nullable=False)
+    related_entity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="ACTIVE", index=True) # ACTIVE, ACKNOWLEDGED, DISMISSED
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=datetime.datetime.now(datetime.timezone.utc))
+    dismissed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dismissed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)

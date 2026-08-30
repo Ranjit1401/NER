@@ -23,7 +23,9 @@ import {
   LogisticsHub,
   DispatchOrder,
   AIAuditLog,
-  HealthStatus
+  HealthStatus,
+  FieldReportItem,
+  DriverEmergencyItem,
 } from './services/api';
 import { MapView } from './components/MapView';
 import { SystemStatusBar } from './components/SystemStatusBar';
@@ -39,8 +41,6 @@ import { DispatchOperationsView } from './components/DispatchOperationsView';
 import { DispatchTelemetryPanel } from './components/DispatchTelemetryPanel';
 import { DispatchDetailDrawer } from './components/DispatchDetailDrawer';
 
-import { FieldReportsPanel } from './components/FieldReportsPanel';
-
 interface NavItem {
   id: string;
   label: string;
@@ -54,7 +54,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'routes', label: 'Route Intelligence', icon: Route },
   { id: 'logistics', label: 'Logistics Overview', icon: Truck },
   { id: 'dispatches', label: 'Dispatch Approvals', icon: Send, badge: 'HITL' },
-  { id: 'field-reports', label: 'Field Reports (Sync)', icon: FileText, badge: 'Offline' },
   { id: 'resources', label: 'Resource Inventory', icon: Box },
   { id: 'alerts', label: 'Real-time Alerts', icon: Bell, badge: '4' },
   { id: 'ai-ops', label: 'AI Operations', icon: Bot },
@@ -75,6 +74,10 @@ export const App: React.FC = () => {
   const [hubs, setHubs] = useState<LogisticsHub[]>([]);
   const [dispatches, setDispatches] = useState<DispatchOrder[]>([]);
   const [auditLogs, setAuditLogs] = useState<AIAuditLog[]>([]);
+  const [fieldReports, setFieldReports] = useState<FieldReportItem[]>([]);
+  const [emergencies, setEmergencies] = useState<DriverEmergencyItem[]>([]);
+  const [driverTelemetry, setDriverTelemetry] = useState<Array<any>>([]);
+  const [systemAlerts, setSystemAlerts] = useState<Array<any>>([]);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +94,19 @@ export const App: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [healthData, disastersData, roadsData, affectedRoadsData, hubsData, dispatchesData, logsData] = await Promise.all([
+      const [
+        healthData,
+        disastersData,
+        roadsData,
+        affectedRoadsData,
+        hubsData,
+        dispatchesData,
+        logsData,
+        reportsData,
+        emergenciesData,
+        telemetryData,
+        alertsData,
+      ] = await Promise.all([
         api.getHealth().catch(() => null),
         api.getDisasters().catch(() => []),
         api.getRoads().catch(() => []),
@@ -99,6 +114,10 @@ export const App: React.FC = () => {
         api.getHubs().catch(() => []),
         api.getDispatches().catch(() => []),
         api.getAuditLogs().catch(() => []),
+        api.getFieldReports().catch(() => []),
+        api.getEmergencies().catch(() => []),
+        api.getLatestDriverTelemetry().catch(() => []),
+        api.getAlerts().catch(() => []),
       ]);
 
       setHealth(healthData);
@@ -109,6 +128,10 @@ export const App: React.FC = () => {
       setHubs(hubsData);
       setDispatches(dispatchesData);
       setAuditLogs(logsData);
+      setFieldReports(reportsData);
+      setEmergencies(emergenciesData);
+      setDriverTelemetry(telemetryData);
+      setSystemAlerts(alertsData);
       setLastSyncTime(new Date().toLocaleTimeString());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to connect to API backend');
@@ -132,14 +155,48 @@ export const App: React.FC = () => {
       <SystemStatusBar
         health={health}
         healthLoading={healthLoading}
-        activeIncidentsCount={disasters.filter((d) => d.status === 'ACTIVE').length}
-        criticalAlertsCount={disasters.filter((d) => d.severity === 'CRITICAL').length}
+        activeIncidentsCount={disasters.filter((d) => d.status === 'ACTIVE').length + fieldReports.length}
+        criticalAlertsCount={disasters.filter((d) => d.severity === 'CRITICAL').length + emergencies.filter((e) => e.severity === 'CRITICAL' && e.status === 'ACTIVE').length}
         lastSyncTime={lastSyncTime}
         dispatchesCount={dispatches.length}
-        activeTrucksCount={dispatches.filter((dp) => String(dp.status) === 'EN_ROUTE' || dp.status === 'APPROVED' || dp.status === 'DISPATCHED').length || 1}
+        activeTrucksCount={driverTelemetry.length || dispatches.filter((dp) => String(dp.status) === 'EN_ROUTE' || dp.status === 'APPROVED' || dp.status === 'DISPATCHED' || dp.status === 'ACCEPTED').length || 3}
         blockedRoutesCount={roads.filter((r) => r.current_status === 'BLOCKED' || r.current_status === 'CAUTION' || r.current_status === 'IMPASSABLE').length}
         pendingApprovalsCount={dispatches.filter((dp) => dp.status === 'PROPOSED' || dp.status === 'PENDING_APPROVAL').length}
       />
+
+      {/* Critical Driver SOS Flashing Emergency Banner */}
+      {emergencies.filter((e) => e.status === 'ACTIVE').length > 0 && (
+        <div className="bg-red-950/90 border-b-2 border-red-500 text-white px-4 py-2 flex items-center justify-between text-xs font-mono animate-pulse z-30 shrink-0">
+          <div className="flex items-center space-x-2">
+            <ShieldAlert size={18} className="text-red-400 shrink-0 animate-bounce" />
+            <strong className="text-red-300 font-extrabold uppercase">🚨 CRITICAL DRIVER SOS ({emergencies.filter((e) => e.status === 'ACTIVE').length}):</strong>
+            <span className="truncate max-w-xl">
+              Truck {emergencies.filter((e) => e.status === 'ACTIVE')[0].truck_id} — {emergencies.filter((e) => e.status === 'ACTIVE')[0].sos_type}: {emergencies.filter((e) => e.status === 'ACTIVE')[0].description} ({emergencies.filter((e) => e.status === 'ACTIVE')[0].latitude.toFixed(4)}°, {emergencies.filter((e) => e.status === 'ACTIVE')[0].longitude.toFixed(4)}°)
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded text-[10px]"
+            >
+              VIEW ON MAP
+            </button>
+            <button
+              onClick={async () => {
+                const activeEm = emergencies.filter((e) => e.status === 'ACTIVE')[0];
+                if (activeEm) {
+                  await api.acknowledgeEmergency(activeEm.client_generated_id);
+                  loadData();
+                }
+              }}
+              className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded text-[10px]"
+            >
+              ACKNOWLEDGE
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
@@ -245,11 +302,18 @@ export const App: React.FC = () => {
                     roads={roads}
                     hubs={hubs}
                     dispatches={dispatches}
+                    fieldReports={fieldReports}
+                    emergencies={emergencies}
+                    driverTelemetry={driverTelemetry}
                     selectedDisasterId={selectedDisaster?.id}
                     onSelectDisaster={(d) => setSelectedDisaster(d)}
                     onSelectHub={(h) => setSelectedHub(h)}
                     onSelectRoad={(r) => setSelectedRoad(r)}
                     onSelectDispatch={(disp) => setSelectedDispatch(disp)}
+                    onAcknowledgeEmergency={async (id) => {
+                      await api.acknowledgeEmergency(id);
+                      loadData();
+                    }}
                   />
                 </div>
               </div>
@@ -330,12 +394,6 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'field-reports' && (
-            <div className="flex-1 h-full overflow-hidden">
-              <FieldReportsPanel />
-            </div>
-          )}
-
           {activeTab === 'resources' && (
             <div className="flex-1 h-full overflow-hidden">
               <ResourcePanel hubs={hubs} loading={loading} />
@@ -344,7 +402,23 @@ export const App: React.FC = () => {
 
           {activeTab === 'alerts' && (
             <div className="flex-1 h-full overflow-hidden">
-              <AlertsPanel />
+              <AlertsPanel
+                systemAlerts={systemAlerts}
+                emergencies={emergencies}
+                fieldReports={fieldReports}
+                disasters={disasters}
+                roads={roads}
+                dispatches={dispatches}
+                onAcknowledgeEmergency={async (id) => {
+                  await api.acknowledgeEmergency(id);
+                  loadData();
+                }}
+                onDismissAlert={async (id) => {
+                  await api.dismissAlert(id);
+                  loadData();
+                }}
+                onViewOnMap={() => setActiveTab('dashboard')}
+              />
             </div>
           )}
 

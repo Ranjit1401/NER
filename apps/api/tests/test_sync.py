@@ -153,3 +153,37 @@ async def test_sync_driver_event_success():
     assert res.status == "SYNCED"
     assert res.client_generated_id == "DRV-EVENT-TEST-01"
     mock_session.commit.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_get_active_vehicles_merges_telemetry():
+    mock_session = AsyncMock()
+    service = OfflineSyncService(mock_session)
+
+    d1 = MagicMock(id=uuid.uuid4(), order_code="DISP-1001", status="APPROVED", created_at=datetime.datetime.now(datetime.timezone.utc), recommended_route_id="NH-27")
+    d2 = MagicMock(id=uuid.uuid4(), order_code="DISP-1002", status="EN_ROUTE", created_at=datetime.datetime.now(datetime.timezone.utc), recommended_route_id="NH-10")
+    d3 = MagicMock(id=uuid.uuid4(), order_code="DISP-1003", status="ACCEPTED", created_at=datetime.datetime.now(datetime.timezone.utc), recommended_route_id="NH-6")
+
+    mock_session.execute.return_value = MagicMock(scalars=lambda: MagicMock(all=lambda: [d1, d2, d3]))
+
+    vehicles = await service.get_active_vehicles()
+    assert len(vehicles) == 3
+    assert vehicles[0].order_code == "DISP-1001"
+    assert vehicles[1].order_code == "DISP-1002"
+    assert vehicles[2].order_code == "DISP-1003"
+
+@pytest.mark.asyncio
+async def test_dismiss_system_alert_persists():
+    mock_session = AsyncMock()
+    service = OfflineSyncService(mock_session)
+
+    mock_alert = MagicMock()
+    mock_alert.id = uuid.uuid4()
+    mock_alert.title = "Test Alert"
+    mock_alert.status = "ACTIVE"
+
+    mock_session.execute.return_value = MagicMock(scalars=lambda: MagicMock(first=lambda: mock_alert))
+
+    success = await service.dismiss_system_alert(str(mock_alert.id))
+    assert success is True
+    assert mock_alert.status == "DISMISSED"
+    mock_session.commit.assert_called_once()

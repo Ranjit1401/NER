@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DisasterEvent, RoadSegment, LogisticsHub, DispatchOrder } from '../services/api';
+import { DisasterEvent, RoadSegment, LogisticsHub, DispatchOrder, FieldReportItem, DriverEmergencyItem } from '../services/api';
 import { Layers, ZoomIn, ZoomOut, RotateCcw, Map as MapIcon, Maximize2, Minimize2 } from 'lucide-react';
 
 interface MapViewProps {
@@ -9,6 +9,21 @@ interface MapViewProps {
   roads: RoadSegment[];
   hubs: LogisticsHub[];
   dispatches?: DispatchOrder[];
+  fieldReports?: FieldReportItem[];
+  emergencies?: DriverEmergencyItem[];
+  driverTelemetry?: Array<{
+    driver_id: string;
+    truck_id: string;
+    dispatch_id: string;
+    latitude: number;
+    longitude: number;
+    speed_kmh: number;
+    heading: number;
+    trip_status: string;
+    severity: string;
+    recorded_at: string;
+    connection_status: string;
+  }>;
   selectedDisasterId?: string | null;
   selectedRoad?: RoadSegment | null;
   selectedHub?: LogisticsHub | null;
@@ -16,6 +31,7 @@ interface MapViewProps {
   onSelectHub?: (hub: LogisticsHub) => void;
   onSelectRoad?: (road: RoadSegment) => void;
   onSelectDispatch?: (dispatch: DispatchOrder) => void;
+  onAcknowledgeEmergency?: (clientGeneratedId: string) => void;
 }
 
 type BasemapStyle = 'dark' | 'light' | 'voyager' | 'osm' | 'hot' | 'satellite';
@@ -111,6 +127,9 @@ export const MapView: React.FC<MapViewProps> = ({
   roads,
   hubs,
   dispatches = [],
+  fieldReports = [],
+  emergencies = [],
+  driverTelemetry = [],
   selectedDisasterId,
   selectedRoad,
   selectedHub,
@@ -118,6 +137,7 @@ export const MapView: React.FC<MapViewProps> = ({
   onSelectHub,
   onSelectRoad,
   onSelectDispatch,
+  onAcknowledgeEmergency,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -509,74 +529,71 @@ export const MapView: React.FC<MapViewProps> = ({
       });
     }
 
-    // 3. Add Truck / Dispatch Markers on Road Corridors
+    // 3. Add Truck / Dispatch Markers on Road Corridors or Live GPS Telemetry
     if (showTrucks && dispatches.length > 0) {
       dispatches.forEach((dispatch, index) => {
-        let targetRoad = roads.find((r) => r.highway_code === dispatch.recommended_route_id);
-        if (!targetRoad && roads.length > 0) {
-          targetRoad = roads[index % roads.length];
+        // Find matching live driver telemetry if available
+        const liveTel = driverTelemetry.find(
+          (t) => t.dispatch_id === dispatch.id || t.dispatch_id === dispatch.order_code || t.truck_id === 'TRK-NE-042'
+        );
+
+        let lng = 0;
+        let lat = 0;
+        let speedText = '45 km/h';
+        let isLiveGps = false;
+
+        if (liveTel && liveTel.longitude && liveTel.latitude) {
+          lng = liveTel.longitude;
+          lat = liveTel.latitude;
+          speedText = `${liveTel.speed_kmh} km/h`;
+          isLiveGps = true;
+        } else {
+          // Fallback to static road segment interpolation
+          let targetRoad = roads.find((r) => r.highway_code === dispatch.recommended_route_id);
+          if (!targetRoad && roads.length > 0) {
+            targetRoad = roads[index % roads.length];
+          }
+
+          if (targetRoad && targetRoad.geometry?.points?.length > 0) {
+            const points = targetRoad.geometry.points;
+            const posRatio = 0.35 + (index % 3) * 0.25;
+            const idxFloat = (points.length - 1) * posRatio;
+            const baseIdx = Math.floor(idxFloat);
+            const p1 = points[baseIdx];
+            lng = p1.longitude;
+            lat = p1.latitude;
+          }
         }
 
-        if (targetRoad && targetRoad.geometry?.points?.length > 0) {
-          const points = targetRoad.geometry.points;
-          // Offset position if multiple trucks share the same road segment
-          const posRatio = 0.35 + (index % 3) * 0.25;
-          const idxFloat = (points.length - 1) * posRatio;
-          const baseIdx = Math.floor(idxFloat);
-          const nextIdx = Math.min(baseIdx + 1, points.length - 1);
-          const p1 = points[baseIdx];
-          const p2 = points[nextIdx];
-
-          // Precise Geographic Bearing Calculation (in degrees clockwise from North)
-          const lat1 = (p1.latitude * Math.PI) / 180;
-          const lat2 = (p2.latitude * Math.PI) / 180;
-          const dLon = ((p2.longitude - p1.longitude) * Math.PI) / 180;
-
-          const y = Math.sin(dLon) * Math.cos(lat2);
-          const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-          let bearingDeg = (Math.atan2(y, x) * 180) / Math.PI;
-          bearingDeg = (bearingDeg + 360) % 360;
-
-          // Convert geographic bearing to CSS rotation angle (for SVG pointing rightwards by default)
-          const cssRotation = bearingDeg - 90;
-
+        if (lng && lat) {
           // Lookup origin and destination hub names
           const originHub = hubs.find((h) => h.id === dispatch.origin_hub_id);
           const destHub = hubs.find((h) => h.id === dispatch.destination_hub_id);
 
           const el = document.createElement('div');
           el.className = 'flex items-center space-x-1 cursor-pointer transition-transform hover:scale-125 z-20 group';
-          el.title = `Convoy ${dispatch.order_code} [IN TRANSIT] - Click for Cargo Manifest`;
-          
+          el.title = `Convoy ${dispatch.order_code} [${dispatch.status}] - Click for Cargo Manifest`;
+
           el.innerHTML = `
-            <div class="relative flex items-center bg-slate-950/90 border-2 border-amber-400 text-amber-300 rounded-md p-1 shadow-2xl filter drop-shadow-xl" style="transform: rotate(${cssRotation}deg);">
+            <div class="relative flex items-center bg-slate-950/90 border-2 border-amber-400 text-amber-300 rounded-md p-1 shadow-2xl filter drop-shadow-xl">
               <!-- Animated Movement Radar Beacon -->
               <span class="absolute -top-1 -right-1 flex h-3 w-3">
                 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-80"></span>
                 <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-500 border border-black"></span>
               </span>
 
-              <!-- Detailed 2D Logistics Truck Silhouette (Cab Facing Right/East) -->
+              <!-- Detailed 2D Logistics Truck Silhouette -->
               <div class="flex items-center">
                 <svg width="42" height="22" viewBox="0 0 70 32" fill="none" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
-                  <!-- Heavy Duty Chassis Frame -->
                   <rect x="4" y="22" width="58" height="3" fill="#334155" />
-                  
-                  <!-- Main Cargo Container Box -->
                   <rect x="2" y="2" width="42" height="20" rx="2" fill="#F59E0B" stroke="#000000" stroke-width="1.8" />
                   <line x1="8" y1="2" x2="8" y2="22" stroke="#78350F" stroke-width="1.2" />
                   <line x1="23" y1="2" x2="23" y2="22" stroke="#78350F" stroke-width="1.2" />
                   <line x1="37" y1="2" x2="37" y2="22" stroke="#78350F" stroke-width="1.2" />
                   <text x="10" y="15" fill="#000000" font-size="8" font-weight="900" font-family="monospace" letter-spacing="0.5">LOGISTICS</text>
-                  
-                  <!-- Truck Cab Unit (Facing Front/Right) -->
                   <path d="M44 7H56L64 15V22H44V7Z" fill="#D97706" stroke="#000000" stroke-width="1.8" />
-                  <!-- Windshield Glass -->
                   <path d="M55 9H59.5L62.5 15H55V9Z" fill="#38BDF8" stroke="#000000" stroke-width="1" />
-                  <!-- Headlight Glow -->
                   <path d="M64 18L68 18" stroke="#FEF08A" stroke-width="3" stroke-linecap="round" />
-                  
-                  <!-- Wheels & Hubcaps -->
                   <circle cx="12" cy="24" r="4.5" fill="#0F172A" stroke="#F59E0B" stroke-width="1.5" />
                   <circle cx="12" cy="24" r="1.8" fill="#CBD5E1" />
                   <circle cx="32" cy="24" r="4.5" fill="#0F172A" stroke="#F59E0B" stroke-width="1.5" />
@@ -589,7 +606,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
             <!-- Hover Telemetry Tag -->
             <div class="bg-slate-900/95 border border-amber-500/60 text-[9px] font-mono px-1.5 py-0.5 rounded text-amber-300 font-extrabold shadow-2xl hidden group-hover:block shrink-0">
-              ${dispatch.order_code} [TRK-NE-042] • 45 km/h • GPS LIVE (12s ago)
+              ${dispatch.order_code} [TRK-NE-042] • ${speedText} • ${isLiveGps ? 'LIVE GPS' : 'DEMO POSITION'}
             </div>
           `;
 
@@ -603,20 +620,101 @@ export const MapView: React.FC<MapViewProps> = ({
             if (onSelectDispatch) onSelectDispatch(dispatch);
             setSelectedFeatureInfo({
               title: `Truck Convoy: ${dispatch.order_code}`,
-              type: 'Active Dispatch Vehicle [DEMO VEHICLE IN TRANSIT]',
+              type: `Active Dispatch Vehicle [${dispatch.status}]`,
               details: [
-                { label: 'Assigned Route', value: `${targetRoad?.highway_code}: ${targetRoad?.segment_name}` },
+                { label: 'Dispatch Code', value: dispatch.order_code },
                 { label: 'Origin Hub', value: originHub?.name || 'Guwahati Central Depot' },
                 { label: 'Destination Hub', value: destHub?.name || 'Shillong Relief Camp' },
                 { label: 'Dispatch Status', value: dispatch.status },
+                { label: 'Speed', value: speedText },
+                { label: 'GPS Source', value: isLiveGps ? 'Driver Mobile Telemetry' : 'Static Corridor Model' },
                 { label: 'Allocated Cargo', value: itemsText },
-                { label: 'Telemetry', value: 'Corridor PostGIS Tracking' },
               ],
             });
           });
 
           const marker = new maplibregl.Marker({ element: el })
-            .setLngLat([p1.longitude, p1.latitude])
+            .setLngLat([lng, lat])
+            .addTo(map);
+          markersRef.current.push(marker);
+        }
+      });
+    }
+
+    // 4. Add Field Officer Report Markers
+    if (fieldReports && fieldReports.length > 0) {
+      fieldReports.forEach((rep) => {
+        if (rep.location && rep.location.longitude && rep.location.latitude) {
+          const el = document.createElement('div');
+          el.className = 'w-7 h-7 rounded-full flex items-center justify-center cursor-pointer border-2 border-white bg-blue-600 text-white shadow-xl z-25 transition-transform hover:scale-125';
+          el.title = `Field Report: ${rep.report_type}`;
+          el.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+          `;
+
+          el.addEventListener('click', () => {
+            setSelectedFeatureInfo({
+              title: rep.report_type,
+              type: 'Field Officer Observation Report',
+              details: [
+                { label: 'Severity', value: rep.severity },
+                { label: 'Description', value: rep.description },
+                { label: 'Reported By', value: rep.reported_by },
+                { label: 'Observed At', value: new Date(rep.observed_at).toLocaleString() },
+                { label: 'Coordinates', value: `${rep.location.latitude.toFixed(4)}°, ${rep.location.longitude.toFixed(4)}°` },
+              ],
+            });
+          });
+
+          const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([rep.location.longitude, rep.location.latitude])
+            .addTo(map);
+          markersRef.current.push(marker);
+        }
+      });
+    }
+
+    // 5. Add Driver SOS & Problem Emergency Markers
+    if (emergencies && emergencies.length > 0) {
+      emergencies.forEach((em) => {
+        if (em.longitude && em.latitude) {
+          const isSos = em.event_type === 'EMERGENCY_SOS' || em.severity === 'CRITICAL';
+          const el = document.createElement('div');
+          el.className = `w-9 h-9 rounded-full flex items-center justify-center cursor-pointer border-2 shadow-2xl z-50 transition-transform hover:scale-125 ${
+            isSos
+              ? 'bg-red-600 border-yellow-300 text-white animate-bounce ring-4 ring-red-500/50'
+              : 'bg-amber-600 border-amber-200 text-white animate-pulse'
+          }`;
+          el.title = `${isSos ? '🚨 DRIVER SOS' : '⚠ DRIVER HAZARD'}: ${em.sos_type}`;
+          el.innerHTML = isSos
+            ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`
+            : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+
+          el.addEventListener('click', () => {
+            if (em.status === 'ACTIVE' && onAcknowledgeEmergency) {
+              onAcknowledgeEmergency(em.client_generated_id);
+            }
+            setSelectedFeatureInfo({
+              title: `${isSos ? '🚨 DRIVER SOS' : 'DRIVER HAZARD'}: ${em.sos_type}`,
+              type: `Critical Vehicle Emergency [${em.status}]`,
+              details: [
+                { label: 'Truck ID', value: em.truck_id },
+                { label: 'Driver ID', value: em.driver_id },
+                { label: 'Dispatch ID', value: em.dispatch_id },
+                { label: 'Emergency Type', value: em.sos_type },
+                { label: 'Severity', value: em.severity },
+                { label: 'Status', value: em.status },
+                { label: 'Description', value: em.description },
+                { label: 'Recorded At', value: new Date(em.timestamp).toLocaleString() },
+              ],
+            });
+          });
+
+          const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([em.longitude, em.latitude])
             .addTo(map);
           markersRef.current.push(marker);
         }

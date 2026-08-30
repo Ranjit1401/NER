@@ -64,3 +64,49 @@ class DriverTelemetryRead(BaseModel):
     severity: str
     recorded_at: datetime.datetime
     connection_status: str = "ONLINE"
+
+class DriverEmergencyRead(BaseModel):
+    client_generated_id: str
+    event_type: str
+    dispatch_id: str
+    driver_id: str
+    truck_id: str
+    sos_type: str
+    severity: str
+    description: str
+    latitude: float
+    longitude: float
+    timestamp: datetime.datetime
+    status: str = "ACTIVE"
+
+class SystemAlertRead(BaseModel):
+    id: uuid.UUID
+    client_generated_id: str | None = None
+    alert_type: str
+    severity: str
+    title: str
+    message: str
+    source: str
+    related_entity_id: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    status: str
+    created_at: datetime.datetime
+    dismissed_at: datetime.datetime | None = None
+    dismissed_by: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ActiveVehicleRead(BaseModel):
+    dispatch_id: str
+    order_code: str
+    truck_id: str
+    driver_id: str
+    latitude: float
+    longitude: float
+    speed_kmh: float
+    heading: float
+    trip_status: str
+    connection_status: str  # LIVE or WAITING
+    recorded_at: datetime.datetime
+    assigned_route: str | None = None

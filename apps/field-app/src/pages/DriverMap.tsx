@@ -182,8 +182,8 @@ export const DriverMap: React.FC = () => {
           </div>
         )}
 
-        {/* 1. Real Interactive Map Container (65vh, min-height 420px) */}
-        <div className="w-full h-[65vh] min-h-[420px] shrink-0">
+        {/* 1. Real Interactive Map Container */}
+        <div className="w-full h-[480px] min-h-[420px] shrink-0">
           <DriverNavigationMap
             driverLat={lat}
             driverLon={lon}

@@ -68,7 +68,7 @@ export interface DispatchOrder {
   recommended_route_id?: string | null;
   allocated_items: Record<string, number>;
   ai_recommendation_id?: string | null;
-  status: 'PROPOSED' | 'PENDING_APPROVAL' | 'APPROVED' | 'DISPATCHED' | 'DELIVERED' | 'REJECTED' | 'CANCELLED' | 'FAILED';
+  status: 'PROPOSED' | 'PENDING_APPROVAL' | 'APPROVED' | 'ASSIGNED' | 'ACCEPTED' | 'EN_ROUTE' | 'DISPATCHED' | 'DELIVERED' | 'REJECTED' | 'CANCELLED' | 'FAILED';
   approved_by?: string | null;
   approved_at?: string | null;
   rejection_reason?: string | null;
@@ -167,6 +167,50 @@ export interface OrchestratedQueryResponse {
   audit_log_id?: string | null;
 }
 
+export interface FieldReportItem {
+  id: string;
+  client_generated_id: string;
+  report_type: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  description: string;
+  location: PointCoordinates;
+  reported_by: string;
+  observed_at: string;
+  created_at: string;
+}
+
+export interface DriverEmergencyItem {
+  client_generated_id: string;
+  event_type: string;
+  dispatch_id: string;
+  driver_id: string;
+  truck_id: string;
+  sos_type: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  description: string;
+  latitude: number;
+  longitude: number;
+  timestamp: string;
+  status: 'ACTIVE' | 'ACKNOWLEDGED';
+}
+
+export interface SystemAlertItem {
+  id: string;
+  client_generated_id?: string | null;
+  alert_type: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  title: string;
+  message: string;
+  source: string;
+  related_entity_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  status: 'ACTIVE' | 'ACKNOWLEDGED' | 'DISMISSED';
+  created_at: string;
+  dismissed_at?: string | null;
+  dismissed_by?: string | null;
+}
+
 export interface SyncResult {
   client_generated_id: string;
   status: 'SYNCED' | 'CONFLICT' | 'FAILED';
@@ -194,6 +238,26 @@ export const api = {
     fetchJson<SyncResult>('/api/v1/sync/field-reports', {
       method: 'POST',
       body: JSON.stringify(report),
+    }),
+
+  getFieldReports: (): Promise<FieldReportItem[]> =>
+    fetchJson<FieldReportItem[]>('/api/v1/sync/field-reports'),
+
+  getEmergencies: (): Promise<DriverEmergencyItem[]> =>
+    fetchJson<DriverEmergencyItem[]>('/api/v1/sync/emergencies'),
+
+  acknowledgeEmergency: (clientGeneratedId: string): Promise<{ client_generated_id: string; acknowledged: boolean }> =>
+    fetchJson<{ client_generated_id: string; acknowledged: boolean }>(`/api/v1/sync/emergencies/${clientGeneratedId}/acknowledge`, {
+      method: 'POST',
+    }),
+
+  // Persistent System Alerts
+  getAlerts: (): Promise<SystemAlertItem[]> =>
+    fetchJson<SystemAlertItem[]>('/api/v1/alerts'),
+
+  dismissAlert: (alertId: string): Promise<{ id: string; status: string }> =>
+    fetchJson<{ id: string; status: string }>(`/api/v1/alerts/${alertId}/dismiss`, {
+      method: 'POST',
     }),
 
   // AI Orchestrated Query
