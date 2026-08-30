@@ -118,7 +118,8 @@ npm --prefix apps/field-app run dev
 
 ## Team
 
-_Add team member names here._
+- Ranjit Bhardwaj
+- Nikita Mishra 
 
 ## Hackathon
 
